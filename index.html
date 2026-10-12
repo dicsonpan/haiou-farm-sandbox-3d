@@ -1,0 +1,1632 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>海鸥农场场部 2m×2m 实体展示沙盘方案 - 三维交互仿真系统</title>
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Three.js and OrbitControls via CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: #0b0f19;
+      color: #e2e8f0;
+      user-select: none;
+    }
+    #canvas-container {
+      width: 100vw;
+      height: 100vh;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.78);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6);
+    }
+    .glass-btn {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      transition: all 0.25s ease;
+    }
+    .glass-btn:hover {
+      background: rgba(59, 130, 246, 0.8);
+      border-color: rgba(147, 197, 253, 0.6);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+    }
+    .glass-btn.active {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      border-color: #60a5fa;
+      color: #ffffff;
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.6);
+    }
+    /* 3D Pin tag */
+    .pin-label {
+      position: absolute;
+      transform: translate(-50%, -100%);
+      pointer-events: auto;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+      z-index: 10;
+    }
+    .pin-label:hover {
+      transform: translate(-50%, -115%) scale(1.08);
+      z-index: 20;
+    }
+    /* Pulse radar */
+    @keyframes radarPulse {
+      0% { transform: scale(0.5); opacity: 1; }
+      100% { transform: scale(2.8); opacity: 0; }
+    }
+    .radar-circle {
+      animation: radarPulse 2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+    }
+    /* Subtitle wave animation */
+    @keyframes voiceBar {
+      0%, 100% { height: 6px; }
+      50% { height: 24px; }
+    }
+    .voice-bar {
+      animation: voiceBar 1.2s ease-in-out infinite;
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.5);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.8);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- WebGL 3D Canvas -->
+  <div id="canvas-container"></div>
+  <div id="labels-container" class="absolute inset-0 pointer-events-none z-10 overflow-hidden"></div>
+
+  <!-- Top Header Bar -->
+  <header class="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
+    <div class="glass-panel px-5 py-3 rounded-2xl pointer-events-auto flex items-center space-x-3.5 border-l-4 border-amber-500">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 flex items-center justify-center text-white shadow-lg shadow-amber-500/30">
+        <i class="fa-solid fa-layer-group text-lg"></i>
+      </div>
+      <div>
+        <div class="flex items-center space-x-2">
+          <h1 class="text-base md:text-lg font-bold tracking-wide text-white">徐闻县曲界镇 · 广东农垦海鸥农场场部</h1>
+          <span class="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-medium">1952-1980s 历史风貌复原</span>
+        </div>
+        <p class="text-xs text-slate-400 flex items-center space-x-2 mt-0.5">
+          <span><i class="fa-solid fa-ruler-combined text-slate-500 mr-1"></i>实体模型：2000mm × 2000mm × 1000mm</span>
+          <span class="text-slate-600">|</span>
+          <span>有效地形区：1900mm × 1900mm</span>
+          <span class="text-slate-600">|</span>
+          <span class="text-emerald-400">总预算：1.5～1.8 万元</span>
+        </p>
+      </div>
+    </div>
+
+    <!-- Top Action Buttons -->
+    <div class="pointer-events-auto flex items-center space-x-2.5">
+      <button id="btn-trigger-voice" class="glass-btn px-4 py-2.5 rounded-xl text-xs md:text-sm font-semibold text-amber-300 border-amber-500/40 hover:bg-amber-600/80 flex items-center space-x-2 shadow-lg shadow-amber-950/40 animate-pulse">
+        <i class="fa-solid fa-person-walking text-amber-400"></i>
+        <span>模拟观众走近沙盘 (触发语音)</span>
+      </button>
+
+      <button id="btn-open-scheme" class="glass-btn px-3.5 py-2.5 rounded-xl text-xs md:text-sm font-medium text-slate-200 hover:text-white flex items-center space-x-1.5">
+        <i class="fa-solid fa-file-invoice-dollar text-blue-400"></i>
+        <span>实施方案与预算核算</span>
+      </button>
+
+      <button id="btn-help" class="glass-btn w-10 h-10 rounded-xl text-slate-300 hover:text-white flex items-center justify-center">
+        <i class="fa-solid fa-circle-question"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Left Control Panel: Views & Layers -->
+  <div class="absolute left-4 top-28 z-20 pointer-events-auto flex flex-col space-y-3">
+    <!-- Camera View Preset -->
+    <div class="glass-panel p-2.5 rounded-2xl flex flex-col space-y-1.5 w-44">
+      <span class="text-[11px] font-semibold text-slate-400 px-2 py-0.5 uppercase tracking-wider">视角选择</span>
+      <button class="view-btn glass-btn px-3 py-1.5 rounded-lg text-xs flex items-center justify-between active" data-view="exhibition">
+        <span><i class="fa-solid fa-cube mr-2 text-blue-400"></i>展厅全景</span>
+        <span class="text-[10px] text-slate-400">45°</span>
+      </button>
+      <button class="view-btn glass-btn px-3 py-1.5 rounded-lg text-xs flex items-center justify-between" data-view="topdown">
+        <span><i class="fa-solid fa-map mr-2 text-emerald-400"></i>卫星俯视</span>
+        <span class="text-[10px] text-slate-400">90°</span>
+      </button>
+      <button class="view-btn glass-btn px-3 py-1.5 rounded-lg text-xs flex items-center justify-between" data-view="visitor">
+        <span><i class="fa-solid fa-eye mr-2 text-purple-400"></i>观众平视</span>
+        <span class="text-[10px] text-slate-400">H1.2m</span>
+      </button>
+      <button class="view-btn glass-btn px-3 py-1.5 rounded-lg text-xs flex items-center justify-between" data-view="autoTour">
+        <span><i class="fa-solid fa-circle-play mr-2 text-amber-400"></i>自动环游巡检</span>
+        <span class="text-[10px] text-slate-400">360°</span>
+      </button>
+    </div>
+
+    <!-- Sand Table Component Toggles -->
+    <div class="glass-panel p-2.5 rounded-2xl flex flex-col space-y-1.5 w-44">
+      <span class="text-[11px] font-semibold text-slate-400 px-2 py-0.5 uppercase tracking-wider">沙盘部件展示</span>
+      <button id="toggle-acrylic" class="glass-btn px-3 py-1.5 rounded-lg text-xs flex items-center justify-between active">
+        <span><i class="fa-regular fa-clone mr-2 text-sky-400"></i>亚克力防尘罩</span>
+        <span id="acrylic-status" class="text-[10px] font-bold text-sky-400">显示</span>
+      </button>
+      <button id="toggle-labels" class="glass-btn px-3 py-1.5 rounded-lg text-xs flex items-center justify-between active">
+        <span><i class="fa-solid fa-tag mr-2 text-yellow-400"></i>历史旧建筑标签</span>
+        <span id="labels-status" class="text-[10px] font-bold text-yellow-400">开启</span>
+      </button>
+      <button id="toggle-dimensions" class="glass-btn px-3 py-1.5 rounded-lg text-xs flex items-center justify-between active">
+        <span><i class="fa-solid fa-ruler mr-2 text-pink-400"></i>工程尺寸标尺</span>
+        <span id="dimensions-status" class="text-[10px] font-bold text-pink-400">显示</span>
+      </button>
+      <button id="toggle-xray" class="glass-btn px-3 py-1.5 rounded-lg text-xs flex items-center justify-between">
+        <span><i class="fa-solid fa-bone mr-2 text-emerald-400"></i>底座钢架透视</span>
+        <span id="xray-status" class="text-[10px] text-slate-400">关闭</span>
+      </button>
+    </div>
+
+    <!-- Lighting Preset -->
+    <div class="glass-panel p-2.5 rounded-2xl flex flex-col space-y-1.5 w-44">
+      <span class="text-[11px] font-semibold text-slate-400 px-2 py-0.5 uppercase tracking-wider">环境光照模式</span>
+      <div class="grid grid-cols-3 gap-1">
+        <button class="light-btn glass-btn py-1.5 rounded text-[11px] active" data-light="museum" title="展厅专业重点射灯">
+          <i class="fa-solid fa-lightbulb"></i>
+        </button>
+        <button class="light-btn glass-btn py-1.5 rounded text-[11px]" data-light="day" title="日间自然日光">
+          <i class="fa-solid fa-sun"></i>
+        </button>
+        <button class="light-btn glass-btn py-1.5 rounded text-[11px]" data-light="dusk" title="菠萝的海红土黄昏">
+          <i class="fa-solid fa-cloud-sun"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Floating Interactive Voice Banner (Simulating Visitor Approach) -->
+  <div id="voice-banner" class="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-[92%] max-w-3xl glass-panel p-4 rounded-3xl border border-amber-500/30 transition-all duration-500 opacity-0 pointer-events-none transform translate-y-6">
+    <div class="flex items-center space-x-4">
+      <!-- Radar animation icon -->
+      <div class="relative w-12 h-12 flex-shrink-0 flex items-center justify-center bg-amber-500/20 rounded-2xl border border-amber-500/40">
+        <div class="absolute inset-0 rounded-2xl border-2 border-amber-400 radar-circle"></div>
+        <i class="fa-solid fa-volume-high text-amber-400 text-xl"></i>
+      </div>
+
+      <!-- Voice Info & Dynamic Subtitle -->
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center space-x-2">
+            <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+            <span class="text-xs font-bold uppercase tracking-wider text-amber-300">微波雷达感应中 · 智能情境解说播放中</span>
+          </div>
+          <!-- Audio wave bars -->
+          <div class="flex items-center space-x-1 h-5">
+            <span class="w-1 bg-amber-400 rounded-full voice-bar" style="animation-delay: 0.1s"></span>
+            <span class="w-1 bg-amber-400 rounded-full voice-bar" style="animation-delay: 0.3s"></span>
+            <span class="w-1 bg-amber-400 rounded-full voice-bar" style="animation-delay: 0.2s"></span>
+            <span class="w-1 bg-amber-400 rounded-full voice-bar" style="animation-delay: 0.5s"></span>
+            <span class="w-1 bg-amber-400 rounded-full voice-bar" style="animation-delay: 0.4s"></span>
+          </div>
+        </div>
+        <!-- Subtitles -->
+        <p id="voice-subtitles" class="text-sm font-medium text-slate-100 leading-relaxed tracking-wide italic">
+          “走过半个多世纪的风雨，这里是徐闻曲界海鸥农场。红土地上的每一垄菠萝，每一滴白色的橡胶乳汁，都印刻着当年拓荒者与知青们青春的汗水与滚烫的记忆……”
+        </p>
+      </div>
+
+      <!-- Control Button -->
+      <button id="btn-close-voice" class="glass-btn p-2 rounded-xl text-slate-400 hover:text-white flex-shrink-0">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Building Detail Popup Modal (Right Side) -->
+  <div id="building-modal" class="absolute right-4 top-28 bottom-8 w-80 md:w-96 glass-panel rounded-3xl p-5 z-20 transform translate-x-[115%] transition-transform duration-300 flex flex-col justify-between overflow-hidden">
+    <div class="overflow-y-auto pr-1">
+      <div class="flex items-start justify-between pb-3 border-b border-slate-700/60 mb-3">
+        <div>
+          <span id="modal-tag" class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">生产工业建筑</span>
+          <h2 id="modal-title" class="text-lg font-bold text-white mt-1">海鸥农场大礼堂</h2>
+          <p id="modal-era" class="text-xs text-amber-400">始建于 1968 年 · 历史风貌保留区</p>
+        </div>
+        <button id="btn-close-modal" class="glass-btn w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3.5 text-xs text-slate-300">
+        <div>
+          <h4 class="font-bold text-slate-100 mb-1 flex items-center"><i class="fa-solid fa-clock-rotate-left mr-1.5 text-amber-400"></i>改造前历史属性与功能</h4>
+          <p id="modal-desc" class="leading-relaxed text-slate-300 bg-slate-900/50 p-2.5 rounded-xl border border-slate-800">
+            作为海鸥农场全场政治文化中心，可容纳上千名职工与下乡知青。当年曾举办知青文艺汇演、重要全场大会及周六夜场露天/室内电影放映。
+          </p>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-slate-100 mb-1 flex items-center"><i class="fa-solid fa-microchip mr-1.5 text-blue-400"></i>实体沙盘制作工艺</h4>
+          <div class="grid grid-cols-2 gap-2 text-[11px]">
+            <div class="bg-slate-900/50 p-2 rounded-lg border border-slate-800">
+              <span class="text-slate-400 block">制造工艺</span>
+              <span id="modal-tech" class="text-slate-200 font-semibold">SLA工业级光敏树脂</span>
+            </div>
+            <div class="bg-slate-900/50 p-2 rounded-lg border border-slate-800">
+              <span class="text-slate-400 block">预估单体重量</span>
+              <span id="modal-weight" class="text-amber-400 font-semibold">约 120 克 (1.5mm抽壳)</span>
+            </div>
+            <div class="bg-slate-900/50 p-2 rounded-lg border border-slate-800">
+              <span class="text-slate-400 block">涂装规范</span>
+              <span id="modal-finish" class="text-slate-200 font-semibold">手工仿旧红砖漆+灰瓦分色</span>
+            </div>
+            <div class="bg-slate-900/50 p-2 rounded-lg border border-slate-800">
+              <span class="text-slate-400 block">实体模型尺寸</span>
+              <span id="modal-size" class="text-slate-200 font-semibold">160 × 90 × 45 mm</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-slate-100 mb-1 flex items-center"><i class="fa-solid fa-circle-info mr-1.5 text-emerald-400"></i>历史记忆与情绪共鸣点</h4>
+          <p id="modal-story" class="text-slate-300 leading-relaxed bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20 text-amber-200">
+            “大礼堂正门上方的红五星与水泥浮雕标语，是数千知青献给热血青春最庄重的印记。”
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick action inside modal -->
+    <div class="pt-3 border-t border-slate-700/60 flex items-center space-x-2">
+      <button id="btn-focus-cam" class="flex-1 glass-btn py-2 rounded-xl text-xs font-semibold text-blue-300 hover:text-white flex items-center justify-center space-x-1.5">
+        <i class="fa-solid fa-crosshairs"></i>
+        <span>特写视角对齐</span>
+      </button>
+      <button id="btn-play-building-voice" class="glass-btn px-3 py-2 rounded-xl text-xs text-amber-300 hover:text-white flex items-center space-x-1">
+        <i class="fa-solid fa-volume-high"></i>
+        <span>朗读</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Big Scheme & Budget Breakdown Modal -->
+  <div id="scheme-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
+    <div class="glass-panel w-full max-w-4xl max-h-[90vh] rounded-3xl p-6 md:p-8 flex flex-col justify-between shadow-2xl border border-slate-700 overflow-hidden transform scale-95 transition-transform duration-300">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between pb-4 border-b border-slate-700">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-2xl bg-blue-600/30 border border-blue-500/50 flex items-center justify-center text-blue-400">
+            <i class="fa-solid fa-diagram-project text-lg"></i>
+          </div>
+          <div>
+            <h2 class="text-lg md:text-xl font-bold text-white">海鸥农场场部 2m×2m 仿真展示沙盘 · 实施方案与造价核算书</h2>
+            <p class="text-xs text-slate-400 mt-0.5">面向业主/领导汇报标准工程清单 · 严格控制在 1.5～1.8 万元总预算内</p>
+          </div>
+        </div>
+        <button id="btn-close-scheme" class="glass-btn w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:text-white">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body Content -->
+      <div class="overflow-y-auto my-4 pr-2 space-y-6 text-xs md:text-sm text-slate-300">
+        
+        <!-- Section 1: Specifications Overview -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800">
+            <div class="text-slate-400 text-xs mb-1">外形总尺寸</div>
+            <div class="text-base font-bold text-white">2000 × 2000 mm</div>
+            <div class="text-[11px] text-blue-400 mt-1">预留外边框 50mm</div>
+          </div>
+          <div class="bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800">
+            <div class="text-slate-400 text-xs mb-1">有效地形展示区</div>
+            <div class="text-base font-bold text-emerald-400">1900 × 1900 mm</div>
+            <div class="text-[11px] text-emerald-500 mt-1">底面积 3.61 平方米</div>
+          </div>
+          <div class="bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800">
+            <div class="text-slate-400 text-xs mb-1">沙盘总高度 (含底座)</div>
+            <div class="text-base font-bold text-amber-400">1000 mm (1.0米)</div>
+            <div class="text-[11px] text-slate-400 mt-1">成人俯瞰黄金人体工学高度</div>
+          </div>
+          <div class="bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800">
+            <div class="text-slate-400 text-xs mb-1">3D打印材料总预算量</div>
+            <div class="text-base font-bold text-purple-400">约 4.5 ～ 5.5 kg</div>
+            <div class="text-[11px] text-purple-400 mt-1">SLA高韧光敏树脂精细出件</div>
+          </div>
+        </div>
+
+        <!-- Section 2: Budget Breakdown Table -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-bold text-white text-sm flex items-center">
+              <i class="fa-solid fa-coins text-amber-400 mr-2"></i>1.5～1.8 万元总预算明细拆解表（行业穿透底价）
+            </h3>
+            <span class="text-xs text-emerald-400 font-semibold">预算总包：￥15,800 ～ 17,600 元（完全可落地）</span>
+          </div>
+          <div class="overflow-x-auto border border-slate-800 rounded-2xl">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-900 text-slate-400 uppercase text-[11px] border-b border-slate-800">
+                <tr>
+                  <th class="py-2.5 px-3">工程分项</th>
+                  <th class="py-2.5 px-3">规格与工艺标准</th>
+                  <th class="py-2.5 px-3">材料/耗材说明</th>
+                  <th class="py-2.5 px-3 text-right">预算金额 (元)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-800/60">
+                <tr class="hover:bg-slate-800/30">
+                  <td class="py-2.5 px-3 font-semibold text-white">1. 3D打印旧建筑群及手工涂装</td>
+                  <td class="py-2.5 px-3">40~60栋历史旧建筑单独建模+SLA工业级光敏树脂出件+手工做旧喷涂</td>
+                  <td class="py-2.5 px-3 text-slate-400">树脂净重约 4.2kg，备料 5.5kg；做旧红砖/灰瓦分色</td>
+                  <td class="py-2.5 px-3 text-right font-bold text-amber-400">4,200 ～ 5,200</td>
+                </tr>
+                <tr class="hover:bg-slate-800/30">
+                  <td class="py-2.5 px-3 font-semibold text-white">2. 超大亚克力防尘罩工程</td>
+                  <td class="py-2.5 px-3">2000×2000×350mm 整体五面罩，机械无影胶倒角，顶板加透明加强筋</td>
+                  <td class="py-2.5 px-3 text-slate-400"><strong class="text-rose-400">必须采用 8mm~10mm 厚度</strong>高透浇铸板防中央下垂</td>
+                  <td class="py-2.5 px-3 text-right font-bold text-amber-400">3,600 ～ 4,500</td>
+                </tr>
+                <tr class="hover:bg-slate-800/30">
+                  <td class="py-2.5 px-3 font-semibold text-white">3. 承重钢架底座及外饰围裙</td>
+                  <td class="py-2.5 px-3">40×40 镀锌方管井字焊接龙骨（高度1000mm）+ 18mm多层实木台面 + 免漆板/烤漆外包</td>
+                  <td class="py-2.5 px-3 text-slate-400">承重 200kg+，含 6 组不锈钢微调调平地脚杯</td>
+                  <td class="py-2.5 px-3 text-right font-bold text-amber-400">2,200 ～ 2,800</td>
+                </tr>
+                <tr class="hover:bg-slate-800/30">
+                  <td class="py-2.5 px-3 font-semibold text-white">4. 1.9m×1.9m 卫星底图与景观造景</td>
+                  <td class="py-2.5 px-3">曲界镇海鸥农场高精卫星影像 UV 哑光平板喷绘 + 菠萝田与橡胶林微缩造景 + 旧建筑标牌</td>
+                  <td class="py-2.5 px-3 text-slate-400">5mm亚克力底衬板、哑光抗紫外线覆膜、仿真树与静电草粉</td>
+                  <td class="py-2.5 px-3 text-right font-bold text-amber-400">1,500 ～ 2,000</td>
+                </tr>
+                <tr class="hover:bg-slate-800/30">
+                  <td class="py-2.5 px-3 font-semibold text-white">5. 智能人体感应语音音效系统</td>
+                  <td class="py-2.5 px-3">24GHz 隐藏式微波雷达感应器 + 工业级 MP3 触发控制解码器 + 隐藏同轴音箱 + 定制情绪解说录音</td>
+                  <td class="py-2.5 px-3 text-slate-400">自动防打扰逻辑，人靠近50cm无感自动触发播放</td>
+                  <td class="py-2.5 px-3 text-right font-bold text-amber-400">600 ～ 900</td>
+                </tr>
+                <tr class="hover:bg-slate-800/30">
+                  <td class="py-2.5 px-3 font-semibold text-white">6. 保护性木箱包装、物流与现场拼装</td>
+                  <td class="py-2.5 px-3">定制防震特规大木箱，专车运输，师傅现场就位打胶收口与声光电调试</td>
+                  <td class="py-2.5 px-3 text-slate-400">保障 2m 亚克力及精致模型零破损到场</td>
+                  <td class="py-2.5 px-3 text-right font-bold text-amber-400">1,500 ～ 2,200</td>
+                </tr>
+                <tr class="bg-blue-950/40 font-bold text-white">
+                  <td class="py-3 px-3" colspan="3">工程综合总造价 (严格匹配并锁定在规划区间内)</td>
+                  <td class="py-3 px-3 text-right text-emerald-400 text-sm">￥13,600 ～ 17,600 元</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Section 3: Key Technical Advisories -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          <div class="bg-amber-500/10 border border-amber-500/30 p-3.5 rounded-2xl">
+            <h4 class="font-bold text-amber-300 text-xs mb-1 flex items-center">
+              <i class="fa-solid fa-triangle-exclamation mr-1.5"></i>技术难点 1：2000mm 亚克力顶跨下垂规避
+            </h4>
+            <p class="text-xs text-slate-300 leading-relaxed">
+              2 米跨度的单张亚克力在自身重力下极易向内弯曲。本方案强制要求：<strong>顶板厚度不低于 8mm</strong>，顶面内侧胶合 2 道透明压克力三角加强肋骨，有效消除凹陷下垂，保持 5 年以上平整通透。
+            </p>
+          </div>
+
+          <div class="bg-blue-500/10 border border-blue-500/30 p-3.5 rounded-2xl">
+            <h4 class="font-bold text-blue-300 text-xs mb-1 flex items-center">
+              <i class="fa-solid fa-heart mr-1.5"></i>技术亮点 2：高情绪价值智能发音设计
+            </h4>
+            <p class="text-xs text-slate-300 leading-relaxed">
+              采用 24GHz 微波传感器隐藏在沙盘木质前沿内，不露外观痕迹。观众走近至 0.8 米时静默感应，自动播放 45 秒带有老式农垦军号与知青手风琴伴奏的温情旁白，设置 3 分钟冷却避免重复打扰。
+            </p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="pt-4 border-t border-slate-700 flex items-center justify-between">
+        <span class="text-xs text-slate-400">方案版本：V2.4 正式评审版 · 广东徐闻曲界海鸥农场历史保护课题组</span>
+        <button id="btn-confirm-scheme" class="glass-btn px-6 py-2.5 rounded-xl text-xs md:text-sm font-semibold text-white bg-blue-600 hover:bg-blue-500">
+          已了解方案，返回三维沙盘浏览
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Help / Instructions Modal -->
+  <div id="help-modal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
+    <div class="glass-panel w-full max-w-md rounded-3xl p-6 border border-slate-700 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-700">
+        <h3 class="font-bold text-white text-base flex items-center">
+          <i class="fa-solid fa-gamepad text-amber-400 mr-2"></i>三维沙盘交互指引
+        </h3>
+        <button id="btn-close-help" class="glass-btn w-7 h-7 rounded-full flex items-center justify-center text-slate-400 hover:text-white">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <ul class="text-xs space-y-2.5 text-slate-300">
+        <li class="flex items-start"><i class="fa-solid fa-computer-mouse text-blue-400 mt-0.5 mr-2"></i><strong>左键拖拽：</strong> 360° 旋转观察整个 2m×2m 沙盘模型。</li>
+        <li class="flex items-start"><i class="fa-solid fa-arrows-up-down text-blue-400 mt-0.5 mr-2"></i><strong>滚轮缩放：</strong> 拉近观察旧建筑窗瓦细节或推远看全场部地形。</li>
+        <li class="flex items-start"><i class="fa-solid fa-hand text-blue-400 mt-0.5 mr-2"></i><strong>右键拖拽：</strong> 平移沙盘中心位置。</li>
+        <li class="flex items-start"><i class="fa-solid fa-location-dot text-amber-400 mt-0.5 mr-2"></i><strong>点击建筑或标签：</strong> 镜头平滑特写对齐，弹出历史属性与 3D 打印制作说明。</li>
+        <li class="flex items-start"><i class="fa-solid fa-volume-high text-emerald-400 mt-0.5 mr-2"></i><strong>右上角感应测试：</strong> 模拟观众走近时的视角变化与情感情绪解说语音播放。</li>
+      </ul>
+      <div class="pt-2">
+        <button id="btn-got-it" class="w-full glass-btn py-2.5 rounded-xl text-xs font-semibold text-white bg-blue-600/80 hover:bg-blue-600">
+          开始探索沙盘
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ==========================================================================
+       海鸥农场场部 2m×2m 仿真沙盘 3D 核心脚本 (Three.js)
+       ========================================================================== */
+
+    // 1. Scene, Camera, Renderer Setup
+    const container = document.getElementById('canvas-container');
+    const labelsContainer = document.getElementById('labels-container');
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0e17);
+    scene.fog = new THREE.FogExp2(0x0a0e17, 0.12);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    // Initial camera position for natural exhibition perspective
+    camera.position.set(2.8, 2.5, 3.2);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI / 2 - 0.02; // Don't look under floor
+    controls.minDistance = 0.8;
+    controls.maxDistance = 7.5;
+    controls.target.set(0, 0.45, 0);
+
+    // 2. Lighting System
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+    scene.add(ambientLight);
+
+    const mainSpot = new THREE.SpotLight(0xfff7ed, 2.2);
+    mainSpot.position.set(2.5, 4.5, 2.5);
+    mainSpot.angle = Math.PI / 3;
+    mainSpot.penumbra = 0.4;
+    mainSpot.castShadow = true;
+    mainSpot.shadow.mapSize.width = 2048;
+    mainSpot.shadow.mapSize.height = 2048;
+    mainSpot.shadow.camera.near = 1;
+    mainSpot.shadow.camera.far = 10;
+    mainSpot.shadow.bias = -0.0005;
+    scene.add(mainSpot);
+
+    const fillSpot = new THREE.SpotLight(0x93c5fd, 1.2);
+    fillSpot.position.set(-3.0, 3.5, -2.5);
+    fillSpot.angle = Math.PI / 3;
+    fillSpot.penumbra = 0.5;
+    scene.add(fillSpot);
+
+    const warmAccent = new THREE.PointLight(0xf59e0b, 0.8, 6);
+    warmAccent.position.set(0, 1.8, 0);
+    scene.add(warmAccent);
+
+    // Ground Floor in Exhibition Hall
+    const floorGeo = new THREE.PlaneGeometry(16, 16);
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x080c14,
+      roughness: 0.85,
+      metalness: 0.2
+    });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.5;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // Subtle grid on floor
+    const grid = new THREE.GridHelper(16, 32, 0x1e293b, 0x0f172a);
+    grid.position.y = -0.49;
+    scene.add(grid);
+
+    // 3. Sand Table Group Object
+    // Scale representation:
+    // 1 Unit in Three.js = 1 Meter (1000mm)
+    // Outer Size: 2.0m × 2.0m. Table height: 1.0m (from y=-0.5 to y=0.5)
+    // Terrain zone: 1.9m × 1.9m, offset 0.05m border.
+    const sandTableGroup = new THREE.Group();
+    scene.add(sandTableGroup);
+
+    // --- Sub-component: Base Cabinet (1000mm high, 2000×2000mm) ---
+    // Lower Base Pedestal (y: -0.5 to +0.42, height 0.92m)
+    const baseWidth = 2.0;
+    const baseDepth = 2.0;
+    const baseHeight = 0.92;
+    const baseGeo = new THREE.BoxGeometry(baseWidth, baseHeight, baseDepth);
+
+    // Dark walnut / brushed steel material for the base cabinet
+    const baseMaterial = new THREE.MeshStandardMaterial({
+      color: 0x181c24,
+      roughness: 0.45,
+      metalness: 0.65
+    });
+    const baseMesh = new THREE.Mesh(baseGeo, baseMaterial);
+    baseMesh.position.y = -0.5 + baseHeight / 2;
+    baseMesh.castShadow = true;
+    baseMesh.receiveShadow = true;
+    sandTableGroup.add(baseMesh);
+
+    // Steel frame reveal line (Kicking strip at bottom)
+    const kickGeo = new THREE.BoxGeometry(1.92, 0.08, 1.92);
+    const kickMat = new THREE.MeshStandardMaterial({ color: 0x0f131a, roughness: 0.9, metalness: 0.1 });
+    const kickMesh = new THREE.Mesh(kickGeo, kickMat);
+    kickMesh.position.y = -0.46;
+    sandTableGroup.add(kickMesh);
+
+    // Internal Steel Frame (For X-Ray Mode)
+    const frameGroup = new THREE.Group();
+    frameGroup.visible = false;
+    const steelMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.25, wireframe: false });
+    // 4 legs
+    const legGeo = new THREE.BoxGeometry(0.04, 0.9, 0.04);
+    const legOffsets = [
+      [-0.92, -0.92], [0.92, -0.92], [-0.92, 0.92], [0.92, 0.92],
+      [-0.92, 0], [0.92, 0], [0, -0.92], [0, 0.92], [0, 0] // 9 legs for 2m huge span
+    ];
+    legOffsets.forEach(([lx, lz]) => {
+      const leg = new THREE.Mesh(legGeo, steelMat);
+      leg.position.set(lx, -0.05, lz);
+      frameGroup.add(leg);
+    });
+    // Top cross beams
+    const beamGeoX = new THREE.BoxGeometry(1.92, 0.04, 0.04);
+    const beamGeoZ = new THREE.BoxGeometry(0.04, 0.04, 1.92);
+    [-0.92, 0, 0.92].forEach(pz => {
+      const bx = new THREE.Mesh(beamGeoX, steelMat);
+      bx.position.set(0, 0.38, pz);
+      frameGroup.add(bx);
+    });
+    [-0.92, 0, 0.92].forEach(px => {
+      const bz = new THREE.Mesh(beamGeoZ, steelMat);
+      bz.position.set(px, 0.38, 0);
+      frameGroup.add(bz);
+    });
+    sandTableGroup.add(frameGroup);
+
+    // Border Frame: 2000mm × 2000mm with 50mm perimeter rim
+    const frameBorderMat = new THREE.MeshStandardMaterial({
+      color: 0x242b35,
+      roughness: 0.3,
+      metalness: 0.8
+    });
+    // Frame top surface edge (height 0.04m, y=0.44)
+    const rimThickness = 0.05; // 50mm
+    const rimH = 0.05;
+    const rimNorth = new THREE.Mesh(new THREE.BoxGeometry(2.0, rimH, rimThickness), frameBorderMat);
+    rimNorth.position.set(0, 0.44, 0.975);
+    const rimSouth = new THREE.Mesh(new THREE.BoxGeometry(2.0, rimH, rimThickness), frameBorderMat);
+    rimSouth.position.set(0, 0.44, -0.975);
+    const rimEast = new THREE.Mesh(new THREE.BoxGeometry(rimThickness, rimH, 1.9), frameBorderMat);
+    rimEast.position.set(0.975, 0.44, 0);
+    const rimWest = new THREE.Mesh(new THREE.BoxGeometry(rimThickness, rimH, 1.9), frameBorderMat);
+    rimWest.position.set(-0.975, 0.44, 0);
+    sandTableGroup.add(rimNorth, rimSouth, rimEast, rimWest);
+
+    // Brass Plaque on Front Rim (2000mm rim)
+    const plaqueGeo = new THREE.PlaneGeometry(0.32, 0.035);
+    const plaqueCanvas = document.createElement('canvas');
+    plaqueCanvas.width = 512; plaqueCanvas.height = 64;
+    const pctx = plaqueCanvas.getContext('2d');
+    pctx.fillStyle = '#b45309';
+    pctx.fillRect(0, 0, 512, 64);
+    pctx.strokeStyle = '#fef3c7';
+    pctx.lineWidth = 4;
+    pctx.strokeRect(4, 4, 504, 56);
+    pctx.fillStyle = '#fef3c7';
+    pctx.font = 'bold 22px sans-serif';
+    pctx.textAlign = 'center';
+    pctx.textBaseline = 'middle';
+    pctx.fillText('广东农垦 · 海鸥农场场部历史风貌沙盘', 256, 32);
+    const plaqueTex = new THREE.CanvasTexture(plaqueCanvas);
+    const plaqueMat = new THREE.MeshBasicMaterial({ map: plaqueTex });
+    const plaqueMesh = new THREE.Mesh(plaqueGeo, plaqueMat);
+    plaqueMesh.position.set(0, 0.441, 0.999);
+    sandTableGroup.add(plaqueMesh);
+
+    // --- Sub-component: 1900mm × 1900mm Satellite Terrain Base ---
+    // Generate realistic high-res procedural satellite map texture for Xuwen Qujie Haiou Farm
+    function generateHaiouSatelliteTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 2048;
+      canvas.height = 2048;
+      const ctx = canvas.getContext('2d');
+
+      // 1. Base soil: Zhanjiang's famous brick-red soil (砖红壤) with earthy tones
+      const grad = ctx.createLinearGradient(0, 0, 2048, 2048);
+      grad.addColorStop(0, '#9e3f22');   // Rich red soil
+      grad.addColorStop(0.3, '#782d16');
+      grad.addColorStop(0.7, '#8f3b1f');
+      grad.addColorStop(1, '#662711');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 2048, 2048);
+
+      // 2. Agricultural parcels: "菠萝的海" (Sea of Pineapples) Striated geometric fields
+      const parcelColors = [
+        '#d97706', '#b45309', '#ca8a04', '#eab308', // Pineapple harvest yellow-gold
+        '#15803d', '#166534', '#14532d',           // Rubber trees / tea bushes green
+        '#a16207', '#854d0e', '#713f12',           // Fresh tilled red-brown soil
+        '#4d7c0f', '#3f6212'                       // Sisal / tropical fruit orchards
+      ];
+
+      // Draw patchwork agricultural plots around the farm HQ
+      for (let i = 0; i < 48; i++) {
+        const px = (i % 8) * 260 + (Math.random() * 40 - 20);
+        const py = Math.floor(i / 8) * 350 + (Math.random() * 40 - 20);
+        const pw = 240 + (Math.random() * 40 - 20);
+        const ph = 320 + (Math.random() * 40 - 20);
+
+        // Skip the core HQ center area (~ 800..1300, 800..1300)
+        if (px > 650 && px < 1400 && py > 650 && py < 1400) continue;
+
+        ctx.fillStyle = parcelColors[Math.floor(Math.random() * parcelColors.length)];
+        ctx.globalAlpha = 0.85;
+        ctx.fillRect(px, py, pw, ph);
+
+        // Pineapple field furrow stripes (垄条)
+        ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        const angle = (i % 2 === 0) ? 0 : Math.PI / 6;
+        for (let s = 0; s < pw; s += 8) {
+          ctx.moveTo(px + s, py);
+          ctx.lineTo(px + s, py + ph);
+        }
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1.0;
+
+      // 3. Hai'ou Tea Factory & Tea Garden Terraces (雄鸥茶场茶垄 - 东南片区)
+      ctx.fillStyle = '#166534';
+      ctx.fillRect(1350, 1200, 600, 700);
+      ctx.strokeStyle = '#22c55e';
+      ctx.lineWidth = 3;
+      for (let ty = 1220; ty < 1880; ty += 14) {
+        ctx.beginPath();
+        ctx.moveTo(1360, ty);
+        ctx.bezierCurveTo(1550, ty + 15, 1750, ty - 15, 1940, ty);
+        ctx.stroke();
+      }
+
+      // 4. Headquarters Core Settlement Ground (场部核心区 - 水泥地与红砖平整硬化)
+      ctx.fillStyle = '#94a3b8'; // Cement squares & open grounds
+      ctx.fillRect(800, 750, 520, 550);
+      // Red clay courtyards between dorms
+      ctx.fillStyle = '#991b1b';
+      ctx.fillRect(820, 1020, 480, 240);
+
+      // 5. Main Road Network (水泥主干道与林荫机耕路)
+      ctx.lineWidth = 18;
+      ctx.strokeStyle = '#cbd5e1'; // Main concrete road (曲界-海鸥主干道)
+      ctx.beginPath();
+      // East-West Main Avenue
+      ctx.moveTo(0, 950);
+      ctx.lineTo(2048, 950);
+      // North-South Central Avenue
+      ctx.moveTo(1024, 0);
+      ctx.lineTo(1024, 2048);
+      ctx.stroke();
+
+      // Secondary field roads (红土机耕路)
+      ctx.lineWidth = 10;
+      ctx.strokeStyle = '#b45309';
+      ctx.beginPath();
+      ctx.moveTo(500, 0); ctx.lineTo(500, 2048);
+      ctx.moveTo(1550, 0); ctx.lineTo(1550, 2048);
+      ctx.moveTo(0, 500); ctx.lineTo(2048, 500);
+      ctx.moveTo(0, 1500); ctx.lineTo(2048, 1500);
+      ctx.stroke();
+
+      // Road shelterbelts (防风林带/木麻黄与橡胶树绿化带)
+      ctx.fillStyle = '#14532d';
+      for (let rx = 20; rx < 2020; rx += 25) {
+        ctx.beginPath();
+        ctx.arc(rx, 930 + (Math.random() * 4 - 2), 7 + Math.random() * 4, 0, Math.PI * 2);
+        ctx.arc(rx, 970 + (Math.random() * 4 - 2), 7 + Math.random() * 4, 0, Math.PI * 2);
+        ctx.arc(1005 + (Math.random() * 4 - 2), rx, 7 + Math.random() * 4, 0, Math.PI * 2);
+        ctx.arc(1045 + (Math.random() * 4 - 2), rx, 7 + Math.random() * 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 6. Historic Water Reservoirs / Ponds (防旱蓄水塘)
+      ctx.fillStyle = '#0284c7';
+      ctx.beginPath();
+      ctx.ellipse(650, 680, 80, 55, Math.PI / 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(1450, 850, 95, 65, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 7. Text Markings on Satellite Map (底面标识)
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.font = 'bold 24px sans-serif';
+      ctx.fillText('【七彩田园 · 菠萝的海片区】', 120, 200);
+      ctx.fillText('【海鸥茶厂 · 雄鸥茶园种植基地】', 1400, 1850);
+      ctx.fillText('【天然橡胶防风林带】', 180, 1800);
+      ctx.fillText('【海鸥农场场部核心生活与生产区】', 830, 720);
+
+      // Compass Rose on bottom-right corner
+      ctx.save();
+      ctx.translate(1880, 180);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, 45, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.moveTo(0, -40); ctx.lineTo(12, 0); ctx.lineTo(-12, 0); ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(0, 40); ctx.lineTo(12, 0); ctx.lineTo(-12, 0); ctx.closePath();
+      ctx.fill();
+      ctx.font = 'bold 18px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('N', 0, -48);
+      ctx.restore();
+
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    const satelliteTexture = generateHaiouSatelliteTexture();
+    satelliteTexture.anisotropy = 8;
+
+    // Terrain Plane: Exactly 1.9m × 1.9m (1900mm × 1900mm)
+    const terrainGeo = new THREE.PlaneGeometry(1.9, 1.9, 64, 64);
+    // Slight elevation relief (Leizhou peninsula rolling micro-topography)
+    const posAttr = terrainGeo.attributes.position;
+    for (let i = 0; i < posAttr.count; i++) {
+      const u = posAttr.getX(i);
+      const v = posAttr.getY(i);
+      // Subtle natural slope of 0.015m (15mm)
+      const h = Math.sin(u * 2.5) * Math.cos(v * 2.5) * 0.008 + Math.sin(u * 5) * 0.003;
+      posAttr.setZ(i, h);
+    }
+    terrainGeo.computeVertexNormals();
+
+    const terrainMat = new THREE.MeshStandardMaterial({
+      map: satelliteTexture,
+      roughness: 0.85,
+      metalness: 0.1
+    });
+    const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
+    terrainMesh.rotation.x = -Math.PI / 2;
+    terrainMesh.position.y = 0.442; // slightly above rim bottom
+    terrainMesh.receiveShadow = true;
+    sandTableGroup.add(terrainMesh);
+
+    // --- Sub-component: 3D Printed Historical Buildings & Landmarks ---
+    const buildingsData = [
+      {
+        id: 'auditorium',
+        name: '海鸥农场大礼堂 (红星礼堂)',
+        tag: '文娱集会',
+        era: '始建于 1968 年 · 场部精神地标',
+        pos: [0.08, 0.445, -0.05],
+        size: [0.18, 0.05, 0.10], // in meters (model scale: 180×100×50mm)
+        color: 0x991b1b, // Red brick
+        roofColor: 0x475569, // Grey tile arched
+        type: 'auditorium',
+        desc: '海鸥农场最核心的历史标志性建筑。苏式大跨度红砖拱顶礼堂，正面立面有立体凸起的红色五星雕饰与“艰苦奋斗 勇于开拓”历史标语。可容纳千余人，是当年全场知青文艺汇演、重要誓师集会及周六晚场电影的放映圣地。',
+        tech: 'SLA工业级高韧光敏树脂精打',
+        weight: '约 130 克 (壁厚1.5mm抽壳)',
+        finish: '纯手工做旧砖墙漆 + 仿青瓦哑光漆',
+        realSize: '实体模型 180 × 100 × 50 mm',
+        story: '“每逢周六，大礼堂门前便挤满了从各生产连队赶来的年轻面孔，那是当年艰苦农垦岁月中最浪漫温暖的心灵栖息地。”'
+      },
+      {
+        id: 'admin_building',
+        name: '场部行政办公大楼',
+        tag: '指挥中枢',
+        era: '始建于 1958 年 · 党委与调度中枢',
+        pos: [-0.18, 0.445, -0.15],
+        size: [0.16, 0.045, 0.08],
+        color: 0xb91c1c,
+        roofColor: 0x334155,
+        type: 'office',
+        desc: '经典二层岭南农垦红砖骑楼式办公楼，带外廊水泥凭栏与红旗基座。为农场党委、调度室、防风抗风指挥中心及广播站所在地，见证了海鸥农场从初创拓荒到现代化垦区的半个世纪变迁。',
+        tech: 'SLA工业级光敏树脂',
+        weight: '约 110 克 (空心设计)',
+        finish: '红砖质感上色 + 窗框精细手工分色',
+        realSize: '实体模型 160 × 80 × 45 mm',
+        story: '“楼顶的高音喇叭一响，千顷胶林与菠萝田便苏醒过来，一代代农垦人由此扛起锄头走向红土地。”'
+      },
+      {
+        id: 'water_tower',
+        name: '场部中心高耸蓄水塔',
+        tag: '生命枢纽',
+        era: '始建于 1965 年 · 老场部最高地标',
+        pos: [0.22, 0.445, 0.12],
+        size: [0.05, 0.12, 0.05], // 120mm tall
+        color: 0x94a3b8,
+        type: 'tower',
+        desc: '圆柱形钢筋混凝土蓄水塔，高居老场部制高点，塔身斑驳并刻有“抓革命 促生产”历史红字。是解决当年垦区数千人饮水和橡胶制胶加工生产用水的生命工程。',
+        tech: '高韧光敏树脂一体成型',
+        weight: '约 60 克 (圆柱中空)',
+        finish: '水泥斑驳风化做旧 + 爬梯金属铜色分色',
+        realSize: '实体模型 直径50mm × 高120mm',
+        story: '“雷州半岛十年九旱，这座高高耸立的水塔，曾是所有农垦人最心安的甘泉依靠。”'
+      },
+      {
+        id: 'tea_factory',
+        name: '海鸥茶厂与制胶初加工车间',
+        tag: '支柱工业',
+        era: '广东农垦“雄鸥”茶业发祥地',
+        pos: [0.38, 0.445, 0.32],
+        size: [0.22, 0.04, 0.14],
+        color: 0x64748b,
+        roofColor: 0x1e293b,
+        type: 'factory',
+        desc: '锯齿形排架采光厂房，配有高耸砖砌大烟囱与茶叶揉捻、烘干车间。著名的广垦“雄鸥红茶/绿茶”与天然生胶压片即诞生于此，曾创下出口创汇的辉煌战绩。',
+        tech: 'SLA光敏树脂 + 亚克力激光镂空窗',
+        weight: '约 150 克',
+        finish: '工业厂房工业灰 + 铁皮瓦做旧',
+        realSize: '实体模型 220 × 140 × 40 mm',
+        story: '“车间里常年弥漫着清冽的茶香与橡胶乳香，那是属于海鸥农场几代人独有的自豪记忆。”'
+      },
+      {
+        id: 'school',
+        name: '海鸥中心小学 / 子弟学校',
+        tag: '教育基地',
+        era: '始建于 1956 年 · 职工子弟启蒙地',
+        pos: [-0.32, 0.445, -0.32],
+        size: [0.18, 0.03, 0.07],
+        color: 0xd97706,
+        roofColor: 0x991b1b,
+        type: 'school',
+        desc: '一字排列的瓦房校舍与泥土小操场。大批下乡知识青年在此执掌教鞭，将知识的种子播撒在雷州半岛红土地上，培育了数以千计的农垦二代与优秀人才。',
+        tech: 'SLA树脂整体打印',
+        weight: '约 75 克',
+        finish: '橘黄外墙 + 砖红瓦面分色',
+        realSize: '实体模型 180 × 70 × 30 mm',
+        story: '“清脆的下课铃与郎朗书声，在寂静的红土地上荡漾了一甲子春秋。”'
+      },
+      {
+        id: 'hospital',
+        name: '农场职工医院 / 卫生所',
+        tag: '医疗保障',
+        era: '始建于 1961 年 · 救死扶伤第一线',
+        pos: [-0.25, 0.445, 0.08],
+        size: [0.12, 0.03, 0.08],
+        color: 0xf1f5f9,
+        roofColor: 0x0369a1,
+        type: 'hospital',
+        desc: '三合院式平房布局，门楣带红十字徽标。承担着数万亩胶林农工的防暑、抗疟、蛇伤抢救及日常医疗救治，是当年南疆农垦一线的守护神。',
+        tech: '光敏树脂精细出件',
+        weight: '约 60 克',
+        finish: '白灰灰塑墙面 + 蓝灰瓦顶',
+        realSize: '实体模型 120 × 80 × 30 mm',
+        story: '“夜色中背着药箱穿行在橡胶林间的赤脚医生背影，至今仍是老职工口中的温情故事。”'
+      },
+      {
+        id: 'dorms',
+        name: '连排农工与知青平房宿舍群',
+        tag: '生活风貌',
+        era: '1960-1970年代 · 万名知青生活区',
+        pos: [-0.08, 0.445, 0.24],
+        size: [0.24, 0.025, 0.16],
+        color: 0xb45309,
+        roofColor: 0x78350f,
+        type: 'dorms',
+        desc: '整齐划一的四排红砖青瓦连排平房，每排带独立炊事灶间与小院落。再现了当年知青挑灯夜读、挑水种菜的生活原貌，是农垦乡愁的最强载体。',
+        tech: '模块化拼装打印 (4排组合件)',
+        weight: '约 140 克',
+        finish: '红砖风化肌理涂装 + 瓦片纹理高光',
+        realSize: '实体模型 240 × 160 × 25 mm',
+        story: '“窄窄的一间单人平房，盛放过整整一代知识青年最绚烂无悔的韶华。”'
+      },
+      {
+        id: 'machinery',
+        name: '农机修配厂与拖拉机停放坪',
+        tag: '机械动力',
+        era: '农垦开荒机械化主力站',
+        pos: [0.28, 0.445, -0.28],
+        size: [0.15, 0.03, 0.09],
+        color: 0x475569,
+        roofColor: 0x334155,
+        type: 'machinery',
+        desc: '半开敞式高顶钢木混构车间，停放着东方红履带式拖拉机与重型圆盘犁。农场依靠这批“铁牛”硬生生在大片荒原上推平沟壑、垦出万顷良田。',
+        tech: 'SLA树脂 + 微缩农机摆件',
+        weight: '约 80 克',
+        finish: '工业耐候漆涂装',
+        realSize: '实体模型 150 × 90 × 30 mm',
+        story: '“轰鸣的柴油马达声，吹响了新中国打破西方橡胶封锁的最强进军号。”'
+      }
+    ];
+
+    const interactiveMeshes = [];
+    const pinsMap = new Map();
+
+    // Procedural building mesh generator
+    function createBuildingMesh(b) {
+      const group = new THREE.Group();
+      group.userData = b;
+
+      const [w, h, d] = b.size;
+
+      if (b.type === 'tower') {
+        // Water Tower: Cylindrical body + cone tank
+        const towerMat = new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.7, metalness: 0.2 });
+        const tankGeo = new THREE.CylinderGeometry(w / 1.5, w / 2, h * 0.4, 16);
+        const tankMesh = new THREE.Mesh(tankGeo, towerMat);
+        tankMesh.position.y = h * 0.8;
+        tankMesh.castShadow = true;
+        group.add(tankMesh);
+
+        const stemGeo = new THREE.CylinderGeometry(w / 3.5, w / 3, h * 0.7, 16);
+        const stemMesh = new THREE.Mesh(stemGeo, towerMat);
+        stemMesh.position.y = h * 0.35;
+        stemMesh.castShadow = true;
+        group.add(stemMesh);
+
+        // Red star or sign on tower
+        const signGeo = new THREE.PlaneGeometry(w * 0.6, h * 0.15);
+        const signMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+        const sign = new THREE.Mesh(signGeo, signMat);
+        sign.position.set(0, h * 0.78, w * 0.52);
+        group.add(sign);
+
+      } else if (b.type === 'auditorium') {
+        // Main Hall: Big body + curved arched barrel roof + portico
+        const wallMat = new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.6, metalness: 0.1 });
+        const wallGeo = new THREE.BoxGeometry(w, h * 0.7, d);
+        const wallMesh = new THREE.Mesh(wallGeo, wallMat);
+        wallMesh.position.y = (h * 0.7) / 2;
+        wallMesh.castShadow = true;
+        group.add(wallMesh);
+
+        // Barrel Vault Roof (Cylinder slice)
+        const roofMat = new THREE.MeshStandardMaterial({ color: b.roofColor, roughness: 0.5 });
+        const roofGeo = new THREE.CylinderGeometry(d / 1.8, d / 1.8, w * 0.98, 16, 1, false, 0, Math.PI);
+        const roofMesh = new THREE.Mesh(roofGeo, roofMat);
+        roofMesh.rotation.z = Math.PI / 2;
+        roofMesh.rotation.y = Math.PI / 2;
+        roofMesh.position.y = h * 0.7;
+        roofMesh.castShadow = true;
+        group.add(roofMesh);
+
+        // Front Entrance Portico with columns
+        const porticoGeo = new THREE.BoxGeometry(w * 0.35, h * 0.8, d * 0.25);
+        const porticoMesh = new THREE.Mesh(porticoGeo, wallMat);
+        porticoMesh.position.set(0, h * 0.4, d * 0.5 + d * 0.08);
+        porticoMesh.castShadow = true;
+        group.add(porticoMesh);
+
+        // Red Star on Facade
+        const starGeo = new THREE.CircleGeometry(0.012, 5);
+        const starMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+        const star = new THREE.Mesh(starGeo, starMat);
+        star.position.set(0, h * 0.65, d * 0.5 + d * 0.21);
+        group.add(star);
+
+      } else if (b.type === 'dorms') {
+        // Dormitories: 4 parallel rows of long gabled houses
+        const wallMat = new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.65 });
+        const roofMat = new THREE.MeshStandardMaterial({ color: b.roofColor, roughness: 0.5 });
+
+        const rowCount = 4;
+        const rowD = d / (rowCount * 1.5);
+        const rowH = h * 0.6;
+        for (let r = 0; r < rowCount; r++) {
+          const rz = -d / 2 + (r * (d / (rowCount - 0.7))) + rowD / 2;
+          const rWall = new THREE.Mesh(new THREE.BoxGeometry(w, rowH, rowD), wallMat);
+          rWall.position.set(0, rowH / 2, rz);
+          rWall.castShadow = true;
+          group.add(rWall);
+
+          // Gabled roof
+          const rRoof = new THREE.Mesh(new THREE.ConeGeometry(rowD * 0.8, h * 0.4, 4), roofMat);
+          rRoof.rotation.y = Math.PI / 4;
+          rRoof.scale.set(w * 1.2, 1, 1);
+          rRoof.position.set(0, rowH + h * 0.2, rz);
+          rRoof.castShadow = true;
+          group.add(rRoof);
+        }
+
+      } else if (b.type === 'factory') {
+        // Factory: Main workshop with saw-tooth roof + tall chimney
+        const wallMat = new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.5 });
+        const wallMesh = new THREE.Mesh(new THREE.BoxGeometry(w * 0.8, h * 0.8, d), wallMat);
+        wallMesh.position.set(-w * 0.1, (h * 0.8) / 2, 0);
+        wallMesh.castShadow = true;
+        group.add(wallMesh);
+
+        // Chimney
+        const chimMat = new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.7 });
+        const chim = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.018, h * 2.2, 12), chimMat);
+        chim.position.set(w * 0.38, (h * 2.2) / 2, -d * 0.35);
+        chim.castShadow = true;
+        group.add(chim);
+
+      } else {
+        // Standard Gabled / Two-story Building
+        const wallMat = new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.6 });
+        const wallMesh = new THREE.Mesh(new THREE.BoxGeometry(w, h * 0.7, d), wallMat);
+        wallMesh.position.y = (h * 0.7) / 2;
+        wallMesh.castShadow = true;
+        group.add(wallMesh);
+
+        // Pitched Roof
+        const roofMat = new THREE.MeshStandardMaterial({ color: b.roofColor || 0x1e293b, roughness: 0.5 });
+        const roofMesh = new THREE.Mesh(new THREE.ConeGeometry(d * 0.75, h * 0.45, 4), roofMat);
+        roofMesh.rotation.y = Math.PI / 4;
+        roofMesh.scale.set(w * 1.15, 1, 1);
+        roofMesh.position.y = (h * 0.7) + (h * 0.45) / 2;
+        roofMesh.castShadow = true;
+        group.add(roofMesh);
+      }
+
+      // Add clickable bounding collider box for easier raycasting
+      const hitBoxGeo = new THREE.BoxGeometry(w * 1.25, Math.max(h * 1.5, 0.08), d * 1.25);
+      const hitBoxMat = new THREE.MeshBasicMaterial({ visible: false });
+      const hitBox = new THREE.Mesh(hitBoxGeo, hitBoxMat);
+      hitBox.position.y = h * 0.6;
+      group.add(hitBox);
+      interactiveMeshes.push(hitBox);
+      hitBox.userData = b;
+
+      // Position in sand table group
+      group.position.set(b.pos[0], b.pos[1], b.pos[2]);
+      sandTableGroup.add(group);
+
+      // Create 2D DOM label tracking this 3D point
+      createBuildingPin(b);
+    }
+
+    // Create 3D HTML Pin Label
+    function createBuildingPin(b) {
+      const pin = document.createElement('div');
+      pin.className = 'pin-label group';
+      pin.dataset.id = b.id;
+      pin.innerHTML = `
+        <div class="flex items-center space-x-1.5 glass-panel px-2.5 py-1 rounded-full border border-amber-500/40 text-[11px] shadow-lg hover:border-amber-400">
+          <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+          <span class="text-white font-medium">${b.name.split(' ')[0]}</span>
+          <i class="fa-solid fa-chevron-right text-[9px] text-amber-300 opacity-60 group-hover:opacity-100"></i>
+        </div>
+        <div class="w-0.5 h-3 bg-amber-400/80 mx-auto"></div>
+        <div class="w-1.5 h-1.5 rounded-full bg-amber-400 mx-auto"></div>
+      `;
+      pin.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectBuilding(b);
+      });
+      labelsContainer.appendChild(pin);
+      pinsMap.set(b.id, { element: pin, pos: new THREE.Vector3(...b.pos).add(new THREE.Vector3(0, b.size[1] + 0.04, 0)) });
+    }
+
+    buildingsData.forEach(b => createBuildingMesh(b));
+
+    // Trees and Landscape foliage around the farm
+    function addLandscapeFoliage() {
+      const foliageGroup = new THREE.Group();
+      const treeMat = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.9 });
+      const palmMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.8 });
+      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 });
+
+      const treeGeo = new THREE.ConeGeometry(0.018, 0.05, 5);
+      const trunkGeo = new THREE.CylinderGeometry(0.003, 0.004, 0.02, 4);
+
+      // Distribute tree clusters along avenues and shelterbelts
+      for (let i = 0; i < 90; i++) {
+        const u = (Math.random() - 0.5) * 1.7;
+        const v = (Math.random() - 0.5) * 1.7;
+        // Avoid center building zone
+        if (Math.abs(u) < 0.35 && Math.abs(v) < 0.35) continue;
+
+        const tree = new THREE.Group();
+        const foliage = new THREE.Mesh(treeGeo, (Math.random() > 0.4) ? treeMat : palmMat);
+        foliage.position.y = 0.035;
+        foliage.castShadow = true;
+        const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+        trunk.position.y = 0.01;
+        tree.add(foliage, trunk);
+        tree.position.set(u, 0.442, v);
+        const scale = 0.7 + Math.random() * 0.6;
+        tree.scale.set(scale, scale, scale);
+        foliageGroup.add(tree);
+      }
+      sandTableGroup.add(foliageGroup);
+    }
+    addLandscapeFoliage();
+
+    // --- Sub-component: Acrylic Dust Cover (2000×2000mm, 400mm High) ---
+    // Physical transparency with realistic refractive Index of Refraction (IOR) 1.49
+    const acrylicWidth = 2.0;
+    const acrylicDepth = 2.0;
+    const acrylicHeight = 0.38;
+    const acrylicGeo = new THREE.BoxGeometry(acrylicWidth, acrylicHeight, acrylicDepth);
+
+    const acrylicMat = new THREE.MeshPhysicalMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.35,
+      transmission: 0.9,     // Light transmission through glass
+      roughness: 0.05,
+      metalness: 0.05,
+      ior: 1.49,             // Acrylic optical index
+      reflectivity: 0.6,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.1,
+      depthWrite: false
+    });
+    const acrylicMesh = new THREE.Mesh(acrylicGeo, acrylicMat);
+    // Positioned over the sand table top (from y=0.44 to 0.82)
+    acrylicMesh.position.set(0, 0.44 + acrylicHeight / 2, 0);
+    sandTableGroup.add(acrylicMesh);
+
+    // Subtle edge highlight for acrylic top perimeter
+    const edgeGeo = new THREE.EdgesGeometry(acrylicGeo);
+    const edgeMat = new THREE.LineBasicMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.5 });
+    const acrylicEdges = new THREE.LineSegments(edgeGeo, edgeMat);
+    acrylicMesh.add(acrylicEdges);
+
+    // --- Sub-component: 3D Engineering Dimension Lines (2000mm & 1000mm) ---
+    const dimensionsGroup = new THREE.Group();
+    function createDimensionRulers() {
+      const lineMat = new THREE.LineDashedMaterial({ color: 0xf43f5e, dashSize: 0.03, gapSize: 0.02 });
+
+      // Width Ruler (2000mm X-axis)
+      const wPts = [new THREE.Vector3(-1.0, 0.44, 1.08), new THREE.Vector3(1.0, 0.44, 1.08)];
+      const wGeo = new THREE.BufferGeometry().setFromPoints(wPts);
+      const wLine = new THREE.Line(wGeo, lineMat);
+      wLine.computeLineDistances();
+      dimensionsGroup.add(wLine);
+
+      // Height Ruler (1000mm Y-axis)
+      const hPts = [new THREE.Vector3(1.08, -0.5, 1.0), new THREE.Vector3(1.08, 0.44, 1.0)];
+      const hGeo = new THREE.BufferGeometry().setFromPoints(hPts);
+      const hLine = new THREE.Line(hGeo, lineMat);
+      hLine.computeLineDistances();
+      dimensionsGroup.add(hLine);
+
+      // Create Text Sprites for Measurements
+      function makeTextSprite(message) {
+        const c = document.createElement('canvas');
+        c.width = 256; c.height = 64;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#f43f5e';
+        ctx.font = 'bold 28px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(message, 128, 32);
+        const tex = new THREE.CanvasTexture(c);
+        const mat = new THREE.SpriteMaterial({ map: tex });
+        const sprite = new THREE.Sprite(mat);
+        sprite.scale.set(0.3, 0.075, 1);
+        return sprite;
+      }
+      const labelW = makeTextSprite('长 2000 mm');
+      labelW.position.set(0, 0.47, 1.08);
+      dimensionsGroup.add(labelW);
+
+      const labelH = makeTextSprite('高 1000 mm');
+      labelH.position.set(1.18, -0.05, 1.0);
+      dimensionsGroup.add(labelH);
+
+      const labelTerrain = makeTextSprite('有效区 1900×1900 mm');
+      labelTerrain.position.set(0, 0.46, 0.88);
+      dimensionsGroup.add(labelTerrain);
+    }
+    createDimensionRulers();
+    sandTableGroup.add(dimensionsGroup);
+
+    // 4. Update 2D Labels on Screen
+    const tempVec = new THREE.Vector3();
+    function updateLabelsPosition() {
+      if (!toggleLabelsBtn.classList.contains('active')) {
+        labelsContainer.style.display = 'none';
+        return;
+      }
+      labelsContainer.style.display = 'block';
+
+      pinsMap.forEach((pinObj) => {
+        tempVec.copy(pinObj.pos);
+        tempVec.project(camera);
+
+        // Check if behind camera
+        if (tempVec.z > 1.0) {
+          pinObj.element.style.display = 'none';
+          return;
+        }
+
+        const x = (tempVec.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-(tempVec.y * 0.5) + 0.5) * window.innerHeight;
+
+        pinObj.element.style.display = 'block';
+        pinObj.element.style.left = `${x}px`;
+        pinObj.element.style.top = `${y}px`;
+      });
+    }
+
+    // 5. Raycasting for Building Selection
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    function onPointerDown(event) {
+      if (event.target.tagName !== 'CANVAS') return;
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(interactiveMeshes);
+
+      if (intersects.length > 0) {
+        const b = intersects[0].object.userData;
+        selectBuilding(b);
+      }
+    }
+    window.addEventListener('pointerdown', onPointerDown);
+
+    // Building Selection & Camera Zoom In
+    const buildingModal = document.getElementById('building-modal');
+    let currentSelectedBuilding = null;
+
+    function selectBuilding(b) {
+      currentSelectedBuilding = b;
+
+      // Populate Modal Info
+      document.getElementById('modal-title').textContent = b.name;
+      document.getElementById('modal-tag').textContent = b.tag;
+      document.getElementById('modal-era').textContent = b.era;
+      document.getElementById('modal-desc').textContent = b.desc;
+      document.getElementById('modal-tech').textContent = b.tech;
+      document.getElementById('modal-weight').textContent = b.weight;
+      document.getElementById('modal-finish').textContent = b.finish;
+      document.getElementById('modal-size').textContent = b.realSize;
+      document.getElementById('modal-story').textContent = b.story;
+
+      buildingModal.style.transform = 'translateX(0)';
+
+      // Smooth camera transition to focus on building
+      const targetPos = new THREE.Vector3(b.pos[0], b.pos[1], b.pos[2]);
+      const offset = new THREE.Vector3(0.5, 0.45, 0.55);
+      const newCamPos = targetPos.clone().add(offset);
+
+      new TWEEN.Tween(controls.target)
+        .to({ x: targetPos.x, y: targetPos.y + 0.05, z: targetPos.z }, 800)
+        .easing(TWEEN.Easing.Cubic.Out)
+        .start();
+
+      new TWEEN.Tween(camera.position)
+        .to({ x: newCamPos.x, y: newCamPos.y, z: newCamPos.z }, 800)
+        .easing(TWEEN.Easing.Cubic.Out)
+        .start();
+    }
+
+    document.getElementById('btn-close-modal').addEventListener('click', () => {
+      buildingModal.style.transform = 'translateX(115%)';
+    });
+
+    document.getElementById('btn-focus-cam').addEventListener('click', () => {
+      if (currentSelectedBuilding) selectBuilding(currentSelectedBuilding);
+    });
+
+    // 6. Intelligent Audio Simulation (走近沙盘·触发情绪价值语音)
+    const btnTriggerVoice = document.getElementById('btn-trigger-voice');
+    const voiceBanner = document.getElementById('voice-banner');
+    const btnCloseVoice = document.getElementById('btn-close-voice');
+    const voiceSubtitles = document.getElementById('voice-subtitles');
+
+    let audioContext = null;
+    let isSpeaking = false;
+
+    // Web Audio Synthesized Nostalgic Chord Background
+    function playNostalgicAmbientChord() {
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        if (!audioContext) audioContext = new AudioContext();
+        if (audioContext.state === 'suspended') audioContext.resume();
+
+        const now = audioContext.currentTime;
+        const freqs = [130.81, 164.81, 196.00, 246.94]; // C3, E3, G3, B3 warm nostalgic chord
+
+        freqs.forEach((f, idx) => {
+          const osc = audioContext.createOscillator();
+          const gain = audioContext.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(f, now);
+
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.exponentialRampToValueAtTime(0.05, now + 1.5 + idx * 0.2);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 12.0);
+
+          osc.connect(gain);
+          gain.connect(audioContext.destination);
+
+          osc.start(now);
+          osc.stop(now + 12.5);
+        });
+      } catch (e) {
+        console.warn('AudioContext not allowed yet:', e);
+      }
+    }
+
+    // Emotional Voice Narration
+    const emotionalScript = [
+      "走过半个多世纪的风雨，这里是徐闻曲界海鸥农场。",
+      "红土地上的每一垄菠萝，每一滴白色的橡胶乳汁，都印刻着当年拓荒战士与下乡知青青春的汗水与滚烫的记忆。",
+      "当年的一砖一瓦、大礼堂的红星、水塔下的号角……如今在这里，重新凝固成历史的丰碑。"
+    ];
+
+    function triggerVisitorApproachVoice() {
+      // 1. Smoothly switch camera to visitor close-up viewpoint (站在沙盘前观赏视角)
+      const visitorCamPos = { x: 0, y: 1.15, z: 1.45 };
+      const visitorTarget = { x: 0, y: 0.44, z: 0.1 };
+
+      new TWEEN.Tween(camera.position)
+        .to(visitorCamPos, 1200)
+        .easing(TWEEN.Easing.Cubic.Out)
+        .start();
+
+      new TWEEN.Tween(controls.target)
+        .to(visitorTarget, 1200)
+        .easing(TWEEN.Easing.Cubic.Out)
+        .start();
+
+      // 2. Play ambient warm chord
+      playNostalgicAmbientChord();
+
+      // 3. Show dynamic subtitle banner
+      voiceBanner.style.opacity = '1';
+      voiceBanner.style.pointerEvents = 'auto';
+      voiceBanner.style.transform = 'translate(-50%, 0)';
+
+      // 4. Voice Speech Synthesis (if browser supports)
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        let fullText = emotionalScript.join(" ");
+        const utterance = new SpeechSynthesisUtterance(fullText);
+        utterance.lang = 'zh-CN';
+        utterance.rate = 0.88; // Slower, nostalgic and emotional tone
+        utterance.pitch = 0.95;
+
+        // Subtitle dynamic sync
+        let sentenceIdx = 0;
+        voiceSubtitles.textContent = emotionalScript[0];
+        const timer = setInterval(() => {
+          sentenceIdx++;
+          if (sentenceIdx < emotionalScript.length) {
+            voiceSubtitles.textContent = emotionalScript[sentenceIdx];
+          } else {
+            clearInterval(timer);
+          }
+        }, 4200);
+
+        utterance.onend = () => {
+          clearInterval(timer);
+        };
+
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+
+    btnTriggerVoice.addEventListener('click', triggerVisitorApproachVoice);
+
+    document.getElementById('btn-play-building-voice').addEventListener('click', () => {
+      if (currentSelectedBuilding && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const text = `${currentSelectedBuilding.name}。${currentSelectedBuilding.desc}`;
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'zh-CN';
+        u.rate = 0.95;
+        window.speechSynthesis.speak(u);
+      }
+    });
+
+    btnCloseVoice.addEventListener('click', () => {
+      voiceBanner.style.opacity = '0';
+      voiceBanner.style.pointerEvents = 'none';
+      voiceBanner.style.transform = 'translate(-50%, 24px)';
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    });
+
+    // 7. View Presets Buttons
+    let isAutoTouring = false;
+    document.querySelectorAll('.view-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const viewType = btn.dataset.view;
+        isAutoTouring = false;
+
+        if (viewType === 'exhibition') {
+          // Standard 45 degree angle
+          animateCameraTo({ x: 2.5, y: 2.2, z: 2.8 }, { x: 0, y: 0.45, z: 0 });
+        } else if (viewType === 'topdown') {
+          // 90 degree satellite topdown
+          animateCameraTo({ x: 0.001, y: 3.5, z: 0.001 }, { x: 0, y: 0.45, z: 0 });
+        } else if (viewType === 'visitor') {
+          // Visitor 1.2m human eye level
+          animateCameraTo({ x: 0, y: 1.15, z: 1.4 }, { x: 0, y: 0.45, z: 0 });
+        } else if (viewType === 'autoTour') {
+          isAutoTouring = true;
+        }
+      });
+    });
+
+    function animateCameraTo(targetCamPos, targetFocus) {
+      new TWEEN.Tween(camera.position)
+        .to(targetCamPos, 900)
+        .easing(TWEEN.Easing.Cubic.Out)
+        .start();
+
+      new TWEEN.Tween(controls.target)
+        .to(targetFocus, 900)
+        .easing(TWEEN.Easing.Cubic.Out)
+        .start();
+    }
+
+    // 8. Sand Table Component Toggles
+    const toggleAcrylicBtn = document.getElementById('toggle-acrylic');
+    toggleAcrylicBtn.addEventListener('click', () => {
+      toggleAcrylicBtn.classList.toggle('active');
+      const isVisible = toggleAcrylicBtn.classList.contains('active');
+      acrylicMesh.visible = isVisible;
+      document.getElementById('acrylic-status').textContent = isVisible ? '显示' : '隐藏';
+      document.getElementById('acrylic-status').className = isVisible ? 'text-[10px] font-bold text-sky-400' : 'text-[10px] text-slate-400';
+    });
+
+    const toggleLabelsBtn = document.getElementById('toggle-labels');
+    toggleLabelsBtn.addEventListener('click', () => {
+      toggleLabelsBtn.classList.toggle('active');
+      const isVisible = toggleLabelsBtn.classList.contains('active');
+      document.getElementById('labels-status').textContent = isVisible ? '开启' : '关闭';
+      document.getElementById('labels-status').className = isVisible ? 'text-[10px] font-bold text-yellow-400' : 'text-[10px] text-slate-400';
+      labelsContainer.style.display = isVisible ? 'block' : 'none';
+    });
+
+    const toggleDimensionsBtn = document.getElementById('toggle-dimensions');
+    toggleDimensionsBtn.addEventListener('click', () => {
+      toggleDimensionsBtn.classList.toggle('active');
+      const isVisible = toggleDimensionsBtn.classList.contains('active');
+      dimensionsGroup.visible = isVisible;
+      document.getElementById('dimensions-status').textContent = isVisible ? '显示' : '隐藏';
+      document.getElementById('dimensions-status').className = isVisible ? 'text-[10px] font-bold text-pink-400' : 'text-[10px] text-slate-400';
+    });
+
+    const toggleXrayBtn = document.getElementById('toggle-xray');
+    toggleXrayBtn.addEventListener('click', () => {
+      toggleXrayBtn.classList.toggle('active');
+      const isXray = toggleXrayBtn.classList.contains('active');
+      frameGroup.visible = isXray;
+      baseMaterial.transparent = isXray;
+      baseMaterial.opacity = isXray ? 0.35 : 1.0;
+      baseMaterial.wireframe = isXray;
+      document.getElementById('xray-status').textContent = isXray ? '开启' : '关闭';
+      document.getElementById('xray-status').className = isXray ? 'text-[10px] font-bold text-emerald-400' : 'text-[10px] text-slate-400';
+    });
+
+    // 9. Lighting Mode Toggles
+    document.querySelectorAll('.light-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.light-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const mode = btn.dataset.light;
+        if (mode === 'museum') {
+          ambientLight.intensity = 0.55;
+          ambientLight.color.setHex(0xffffff);
+          mainSpot.intensity = 2.2;
+          mainSpot.color.setHex(0xfff7ed);
+          renderer.toneMappingExposure = 1.15;
+          scene.background.setHex(0x0a0e17);
+        } else if (mode === 'day') {
+          ambientLight.intensity = 1.1;
+          ambientLight.color.setHex(0xffffff);
+          mainSpot.intensity = 2.6;
+          mainSpot.color.setHex(0xffffff);
+          renderer.toneMappingExposure = 1.35;
+          scene.background.setHex(0x1e293b);
+        } else if (mode === 'dusk') {
+          ambientLight.intensity = 0.45;
+          ambientLight.color.setHex(0xf97316);
+          mainSpot.intensity = 2.0;
+          mainSpot.color.setHex(0xfb923c);
+          renderer.toneMappingExposure = 1.05;
+          scene.background.setHex(0x1c100e);
+        }
+      });
+    });
+
+    // 10. Modals (Scheme & Help)
+    const schemeModal = document.getElementById('scheme-modal');
+    document.getElementById('btn-open-scheme').addEventListener('click', () => {
+      schemeModal.classList.remove('opacity-0', 'pointer-events-none');
+      schemeModal.querySelector('.glass-panel').classList.remove('scale-95');
+    });
+    document.getElementById('btn-close-scheme').addEventListener('click', () => {
+      schemeModal.classList.add('opacity-0', 'pointer-events-none');
+      schemeModal.querySelector('.glass-panel').classList.add('scale-95');
+    });
+    document.getElementById('btn-confirm-scheme').addEventListener('click', () => {
+      schemeModal.classList.add('opacity-0', 'pointer-events-none');
+      schemeModal.querySelector('.glass-panel').classList.add('scale-95');
+    });
+
+    const helpModal = document.getElementById('help-modal');
+    document.getElementById('btn-help').addEventListener('click', () => {
+      helpModal.classList.remove('opacity-0', 'pointer-events-none');
+    });
+    document.getElementById('btn-close-help').addEventListener('click', () => {
+      helpModal.classList.add('opacity-0', 'pointer-events-none');
+    });
+    document.getElementById('btn-got-it').addEventListener('click', () => {
+      helpModal.classList.add('opacity-0', 'pointer-events-none');
+    });
+
+    // 11. Responsive Resize
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // 12. Main Animation Render Loop
+    let angle = 0;
+    function animate() {
+      requestAnimationFrame(animate);
+
+      TWEEN.update();
+
+      // Auto tour rotation
+      if (isAutoTouring) {
+        angle += 0.0035;
+        camera.position.x = Math.sin(angle) * 3.2;
+        camera.position.z = Math.cos(angle) * 3.2;
+        camera.position.y = 1.8 + Math.sin(angle * 2) * 0.2;
+        controls.target.set(0, 0.45, 0);
+      }
+
+      controls.update();
+      updateLabelsPosition();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+  </script>
+</body>
+</html>
